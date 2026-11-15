@@ -12,8 +12,8 @@ Medicine Watch starts with made-up sample medicines. To show Health Canada's rea
 
 | Variable | What it is |
 | --- | --- |
-| `SHORTAGES_EMAIL` | The account's email address. |
-| `SHORTAGES_PASSWORD` | The account's password. |
-| `SHORTAGES_API_URL` | Optional. The list's API, if it isn't `https://www.healthproductshortages.ca/api/v1`. |
+| `OUTSIDE_SHORTAGES_EMAIL` | The account's email address. |
+| `OUTSIDE_SHORTAGES_PASSWORD` | The account's password. |
+| `OUTSIDE_SHORTAGES_API_URL` | Optional. The list's API, if it isn't `https://www.healthproductshortages.ca/api/v1`. Must start with `https://`. |
 
-The app checks the list when someone opens a page and it's more than 6 hours old. If the list can't be reached, people see what it said last time. When a medicine someone tracks changes, the app sends the "A tracked medicine changed" email update to whoever has chosen it on the Updates page.
+The app checks the list just after someone opens a page, when its last good check is more than 6 hours old, so nobody waits for it. A fresh install shows the sample medicines until the first good check replaces them. If the list can't be reached, people see what it said last time. When a medicine someone tracks changes, the app sends the "A tracked medicine changed" email update to whoever has chosen it on the Updates page.

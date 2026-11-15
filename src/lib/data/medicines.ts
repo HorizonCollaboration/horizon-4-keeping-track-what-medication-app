@@ -1,10 +1,11 @@
 import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
+import { after } from "next/server";
 import type { Database } from "@/db";
 import { listCheck, medicine, medicineChange } from "@/db/schema";
 import { dateFromToday, daysBefore } from "@/lib/dates";
 import { urgency, type Status } from "@/lib/statuses";
 import { sampleMedicines } from "@/sampleData";
-import { refreshShortages, shortageSource } from "./shortages";
+import { refreshShortages, shortageSource, type ShortageSource } from "./shortages";
 
 /** The one shared list, for now: the government's public list of medicine shortages. */
 const governmentList = "government-list";
@@ -67,23 +68,23 @@ export async function loadSampleMedicines(db: Database, now = new Date()): Promi
 }
 
 /**
- * Makes sure there's a medicine list before a page shows it: the real
- * shortage list when it's set up (checked again every few hours), otherwise
- * the made-up sample medicines.
+ * Makes sure there's a medicine list before a page shows it. Without the
+ * real shortage list, that's the made-up sample medicines. With it, a fresh
+ * install shows the sample medicines straight away, and the real list is
+ * checked after the page has been sent (when it's due), so nobody waits for
+ * it; the first good check replaces the sample medicines.
  */
-export async function loadMedicines(db: Database): Promise<void> {
-  const source = shortageSource();
-
-  if (source) {
-    await refreshShortages(db, source);
-  } else {
+export async function loadMedicines(
+  db: Database,
+  { source = shortageSource(), later = after }: { source?: ShortageSource | null; later?: (work: () => Promise<void>) => void } = {},
+): Promise<void> {
+  if (!source || (await db.$count(medicine)) === 0) {
     await loadSampleMedicines(db);
   }
-}
 
-/** Whether the list shown is the real one, so pages can say where it comes from. */
-export function isRealList(): boolean {
-  return shortageSource() !== null;
+  if (source) {
+    later(() => refreshShortages(db, source));
+  }
 }
 
 /** When the list was last checked, or null if it never has been. */
