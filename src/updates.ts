@@ -13,6 +13,11 @@
  *     description: "When a food bank asks for something.",
  *   },
  */
-export const updates = {} satisfies Record<string, { label: string; description: string }>;
+export const updates = {
+  medicine_changed: {
+    label: "A tracked medicine changed",
+    description: "When the government's shortage list changes for a medicine someone tracks.",
+  },
+} satisfies Record<string, { label: string; description: string }>;
 
 export type UpdateKind = keyof typeof updates;

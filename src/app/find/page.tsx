@@ -1,10 +1,11 @@
 import { LogIn, Pill, Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { SourceNote } from "@/components/SourceNote";
 import { StatusTag } from "@/components/StatusTag";
 import { TrackButton } from "@/components/TrackButton";
 import { db } from "@/db";
 import { Button, EmptyState, List, Row, ScreenHeader, Tile } from "@/kit";
-import { fullName, loadSampleMedicines, searchMedicines } from "@/lib/data/medicines";
+import { fullName, loadMedicines, searchMedicines } from "@/lib/data/medicines";
 import { trackedIds } from "@/lib/data/tracking";
 import { isStatus } from "@/lib/statuses";
 import { currentUser } from "@/lib/session";
@@ -17,7 +18,7 @@ export default async function FindPage({ searchParams }: PageProps<"/find">) {
   const query = typeof params.q === "string" ? params.q.slice(0, 100) : "";
   const status = typeof params.status === "string" && isStatus(params.status) ? params.status : "all";
 
-  await loadSampleMedicines(db);
+  await loadMedicines(db);
 
   const [results, tracking] = await Promise.all([searchMedicines(db, { query, status }), user ? trackedIds(db, user.id) : new Set<string>()]);
 
@@ -75,6 +76,8 @@ export default async function FindPage({ searchParams }: PageProps<"/find">) {
           ))}
         </List>
       )}
+
+      <SourceNote />
     </AppShell>
   );
 }

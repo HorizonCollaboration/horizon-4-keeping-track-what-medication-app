@@ -4,6 +4,7 @@ import { listCheck, medicine, medicineChange } from "@/db/schema";
 import { dateFromToday, daysBefore } from "@/lib/dates";
 import { urgency, type Status } from "@/lib/statuses";
 import { sampleMedicines } from "@/sampleData";
+import { refreshShortages, shortageSource } from "./shortages";
 
 /** The one shared list, for now: the government's public list of medicine shortages. */
 const governmentList = "government-list";
@@ -63,6 +64,26 @@ export async function loadSampleMedicines(db: Database, now = new Date()): Promi
     .onConflictDoNothing();
 
   await db.insert(listCheck).values({ id: governmentList, checkedAt: now }).onConflictDoNothing();
+}
+
+/**
+ * Makes sure there's a medicine list before a page shows it: the real
+ * shortage list when it's set up (checked again every few hours), otherwise
+ * the made-up sample medicines.
+ */
+export async function loadMedicines(db: Database): Promise<void> {
+  const source = shortageSource();
+
+  if (source) {
+    await refreshShortages(db, source);
+  } else {
+    await loadSampleMedicines(db);
+  }
+}
+
+/** Whether the list shown is the real one, so pages can say where it comes from. */
+export function isRealList(): boolean {
+  return shortageSource() !== null;
 }
 
 /** When the list was last checked, or null if it never has been. */
