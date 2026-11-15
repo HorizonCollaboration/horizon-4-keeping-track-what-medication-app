@@ -30,7 +30,7 @@ const fixedFiles = [
 ];
 
 const outside = "Reach other websites with fetch, from the server.";
-const settings = "Read only the app's own settings, one by name (process.env.NAME), never Horizon's (BETTER_AUTH_SECRET, DATABASE_URL, DB_*, RESEND_*, MAIL_*, HORIZON_*).";
+const settings = "Read only the app's own settings, each by its full name starting OUTSIDE_ (process.env.OUTSIDE_SOURCE_KEY), and never change them.";
 
 // App code tells people something happened with notify(), and uses nothing else of email updates.
 const importPaths = [{ name: "@/lib/updates", allowImportNames: ["notify"], message: "Use notify() from @/lib/updates; the rest of email updates is Horizon's." }];
@@ -44,6 +44,8 @@ const importRules = [
   { regex: "^@/(.*/)?\\.{1,2}/|^@/.*//|^@//", message: "Write the path plainly, such as @/lib/updates." },
   { group: ["@/lib/access"], message: "Only Horizon's own files ask Horizon about people." },
   { group: ["**/updates-schema", "@/db/updates-schema"], message: "Use notify() from @/lib/updates; its tables are Horizon's." },
+  { group: ["@next/env", "next/dist/*", "next/dist/**"], message: "Read only the app's own settings, as process.env.OUTSIDE_NAME." },
+  { group: ["next/script"], message: "Don't load scripts from elsewhere." },
   { group: ["@/lib/auth", "**/lib/auth"], message: "Use currentUser() or requireUser() from @/lib/session, which check the person may still use the app." },
 ];
 
@@ -62,13 +64,16 @@ const syntaxRules = [
   { selector: "ImportExpression", message: "Use a normal import at the top of the file." },
   { selector: "NewExpression[callee.name='Function']", message: "Don't run code from text." },
   { selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']", message: "Don't put unchecked HTML on the page." },
-  // Settings: the app's own, one by name (process.env.NAME), never Horizon's.
-  { selector: "Identifier[name='process']:not(MemberExpression > Identifier.object)", message: settings },
-  { selector: "MemberExpression[object.name='process'][property.name!='env']", message: settings },
+  // Settings: only the app's own, each read by its full name, process.env.OUTSIDE_NAME, and never changed.
+  { selector: "Identifier[name='process']:not(MemberExpression[property.name='env'] > Identifier.object)", message: settings },
+  { selector: "MemberExpression[object.name='process'][property.name='env']:not(MemberExpression[computed=false][property.name=/^OUTSIDE_[A-Z0-9_]+$/] > MemberExpression.object)", message: settings },
   { selector: "MemberExpression[object.name='process'][computed=true]", message: settings },
-  { selector: ":not(MemberExpression) > MemberExpression[object.name='process'][property.name='env']", message: settings },
-  { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][computed=true]", message: settings },
-  { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name=/^(BETTER_AUTH_SECRET|DATABASE_URL|DB_|RESEND_|MAIL_|HORIZON_)/]", message: settings },
+  { selector: "AssignmentExpression > MemberExpression.left[object.object.name='process']", message: settings },
+  { selector: "UpdateExpression > MemberExpression.argument[object.object.name='process']", message: settings },
+  { selector: "UnaryExpression[operator='delete'] > MemberExpression.argument[object.object.name='process']", message: settings },
+  // Code built from text, however Function is reached.
+  { selector: "MemberExpression[property.name='constructor']", message: "Don't run code from text." },
+  { selector: "MemberExpression[computed=true][property.value='constructor']", message: "Don't run code from text." },
 ];
 
 // Every screen is built from Horizon's kit (KIT.md), which owns the colours, so the look can change without rewriting the app.
