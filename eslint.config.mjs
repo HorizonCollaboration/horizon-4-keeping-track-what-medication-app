@@ -29,7 +29,8 @@ const fixedFiles = [
   "tests/boundaries.test.ts",
 ];
 
-const outside = "Horizon apps can't reach other websites; only src/lib/email.ts sends email.";
+const outside = "Reach other websites with fetch, from the server.";
+const settings = "Read only the app's own settings, one by name (process.env.NAME), never Horizon's (BETTER_AUTH_SECRET, DATABASE_URL, DB_*, RESEND_*, MAIL_*, HORIZON_*).";
 
 // App code tells people something happened with notify(), and uses nothing else of email updates.
 const importPaths = [{ name: "@/lib/updates", allowImportNames: ["notify"], message: "Use notify() from @/lib/updates; the rest of email updates is Horizon's." }];
@@ -61,8 +62,13 @@ const syntaxRules = [
   { selector: "ImportExpression", message: "Use a normal import at the top of the file." },
   { selector: "NewExpression[callee.name='Function']", message: "Don't run code from text." },
   { selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']", message: "Don't put unchecked HTML on the page." },
-  { selector: "Literal[value=/^(https?:)?\\/\\/(?!www\\.w3\\.org\\/)/i]", message: outside },
-  { selector: "TemplateElement[value.raw=/(https?:)?\\/\\/(?!www\\.w3\\.org\\/)/i]", message: outside },
+  // Settings: the app's own, one by name (process.env.NAME), never Horizon's.
+  { selector: "Identifier[name='process']:not(MemberExpression > Identifier.object)", message: settings },
+  { selector: "MemberExpression[object.name='process'][property.name!='env']", message: settings },
+  { selector: "MemberExpression[object.name='process'][computed=true]", message: settings },
+  { selector: ":not(MemberExpression) > MemberExpression[object.name='process'][property.name='env']", message: settings },
+  { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][computed=true]", message: settings },
+  { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name=/^(BETTER_AUTH_SECRET|DATABASE_URL|DB_|RESEND_|MAIL_|HORIZON_)/]", message: settings },
 ];
 
 // Every screen is built from Horizon's kit (KIT.md), which owns the colours, so the look can change without rewriting the app.
@@ -90,7 +96,6 @@ const eslintConfig = defineConfig([
     rules: {
       "no-restricted-globals": [
         "error",
-        { name: "fetch", message: outside },
         { name: "XMLHttpRequest", message: outside },
         { name: "WebSocket", message: outside },
         { name: "EventSource", message: outside },
@@ -98,7 +103,6 @@ const eslintConfig = defineConfig([
         { name: "Function", message: "Don't run code from text." },
         { name: "globalThis", message: "Don't reach for globals." },
         { name: "global", message: "Don't reach for globals." },
-        { name: "process", message: "Settings and secrets are read only by Horizon's fixed files." },
         { name: "require", message: "Use import." },
       ],
       "no-restricted-imports": ["error", { paths: importPaths, patterns: importRules }],
