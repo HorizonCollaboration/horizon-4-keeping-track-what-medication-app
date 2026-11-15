@@ -2,8 +2,8 @@ import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/db";
 import { medicine, medicineChange, trackedMedicine, user } from "@/db/schema";
-import { lastChecked, loadMedicines } from "@/lib/data/medicines";
-import { fewestRows, idFor, readTier3Table, refreshTier3, removeRetiredMedicines, tier3Page } from "@/lib/data/tier3";
+import { lastChecked, loadMedicines, loadSampleMedicines } from "@/lib/data/medicines";
+import { fewestRows, idFor, mostDropOffs, readTier3Table, refreshTier3, removeRetiredMedicines, tier3Page } from "@/lib/data/tier3";
 import { trackMedicine } from "@/lib/data/tracking";
 import page from "./fixtures/tier-3-shortages.html?raw";
 import { testDatabase } from "./db";
@@ -23,8 +23,8 @@ const hoursLater = (hours: number) => new Date(now.getTime() + hours * 60 * 60 *
 const realRows = readTier3Table(page);
 
 /** A Tier 3 table holding these medicines, laid out as Health Canada's is. */
-function tableOf(names: string[]): string {
-  const rows = names.map((name) => `<tr><td>${name}</td><td>2026-10-01</td><td>Health Canada</td><td>No</td></tr>`).join("\n");
+function tableOf(names: string[], date = "2026-10-01"): string {
+  const rows = names.map((name) => `<tr><td>${name}</td><td>${date}</td><td>Health Canada</td><td>No</td></tr>`).join("\n");
 
   return `<table><thead><tr><th>Drug (Active Ingredient)</th><th>Date of Tier 3 Determination</th><th>TAC Committee Membership</th><th>Used in the treatment of COVID-19 and/or related conditions (Yes/No)</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
@@ -71,6 +71,25 @@ describe("reading Health Canada's Tier 3 page", () => {
     expect(rows.map((row) => row.name)).toEqual(["Lidocaine 2% with Epinephrine & Saline"]);
   });
 
+  it("reads the table the same when each row's first cell is a row heading", () => {
+    const withRowHeadings = page.replace(/<tr>\s*<td>([\s\S]*?)<\/td>/g, '<tr>\n      <th scope="row">$1</th>');
+
+    expect(withRowHeadings).not.toEqual(page);
+    expect(readTier3Table(withRowHeadings)).toEqual(realRows);
+  });
+
+  it("refuses a table whose columns were read wrongly, rather than saving dates as medicines", () => {
+    const shifted = page.replace(/<tr>\s*<td>[\s\S]*?<\/td>/g, "<tr>");
+
+    expect(() => readTier3Table(shifted)).toThrow("had a name and a date");
+  });
+
+  it("keeps the newest date for a medicine listed twice", () => {
+    const table = tableOf(["Test Medicine 1"], "2026-01-01").replace("</tbody>", "<tr><td>Test Medicine 1</td><td>2026-05-01</td><td></td><td>No</td></tr></tbody>");
+
+    expect(readTier3Table(table).map((row) => row.tier3Since)).toEqual(["2026-05-01"]);
+  });
+
   it("fails when the page has no Tier 3 table", () => {
     expect(() => readTier3Table("<table><tr><th>Something else</th></tr></table>")).toThrow("Couldn't find the Tier 3 table");
   });
@@ -94,6 +113,14 @@ describe("the medicine list", () => {
 
     expect(await db.$count(medicine)).toBe(0);
     expect(await db.$count(trackedMedicine)).toBe(0);
+  });
+
+  it("takes out the tests' sample medicines, should they ever reach a real database", async () => {
+    await loadSampleMedicines(db, now);
+
+    await removeRetiredMedicines(db);
+
+    expect(await db.$count(medicine)).toBe(0);
   });
 
   it("waits for the first read, then reads again only after the page is sent", async () => {
@@ -169,6 +196,30 @@ describe("medicines joining and leaving the list", () => {
     await refreshTier3(db, { now: hoursLater(7), fetcher: canadaSaying(tableOf(names(10).slice(6))) });
 
     expect(await statusOf(db, "Test Medicine 1")).toBe("listed");
+    expect(told).toEqual([]);
+  });
+
+  it(`doesn't take more than ${mostDropOffs} medicines off at once, but still adds new ones`, async () => {
+    const swapped = [...names(10).slice(mostDropOffs + 1), ...Array.from({ length: mostDropOffs + 1 }, (_, index) => `Other Medicine ${index + 1}`)];
+
+    await refreshTier3(db, { now: hoursLater(7), fetcher: canadaSaying(tableOf(swapped)) });
+
+    expect(await statusOf(db, "Test Medicine 1")).toBe("listed");
+    expect(await statusOf(db, "Other Medicine 1")).toBe("listed");
+  });
+
+  it("treats Health Canada rewording a medicine's name as the same medicine, without telling anyone", async () => {
+    await refreshTier3(db, { now: hoursLater(7), fetcher: canadaSaying(tableOf(["TestMedicine-1", ...names(10).slice(1)])) });
+
+    const [renamed] = await db.select().from(medicine).where(eq(medicine.id, idFor("Test Medicine 1")));
+    expect(renamed).toMatchObject({ name: "TestMedicine-1", status: "listed" });
+    expect(await db.$count(medicine)).toBe(10);
+    expect(await db.$count(trackedMedicine)).toBe(1);
+    expect(told).toEqual([]);
+
+    // Read again later under its new name, it's still the same medicine.
+    await refreshTier3(db, { now: hoursLater(14), fetcher: canadaSaying(tableOf(["TestMedicine-1", ...names(10).slice(1)])) });
+    expect(await db.$count(medicine)).toBe(10);
     expect(told).toEqual([]);
   });
 

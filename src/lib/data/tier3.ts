@@ -97,14 +97,33 @@ export function idFor(name: string): string {
     .replace(/^-|-$/g, "")}`.slice(0, 100);
 }
 
+/** Looks like a date or a plain number rather than a medicine's name. */
+function isDateLike(text: string): boolean {
+  return /^[\d\s/.:-]+$/.test(text);
+}
+
+/** The share of rows that must look right (a name and a Tier 3 date) for a read to count. */
+export const rowsThatMustLookRight = 0.8;
+
 /**
  * The rows of the Tier 3 table on Health Canada's page. Finds the table by
- * its headings, so it still works if the page around it changes. Throws if
- * there's no such table. Rows without a drug name are left out.
+ * its headings, so it still works if the page around it changes, and reads
+ * each row's cells whether they're marked up as data or as row headings.
+ * Rows without a drug name are left out; a medicine listed twice keeps its
+ * newest date. Throws if there's no such table, or if the rows don't look
+ * right (most must have a name and a Tier 3 date), since then the columns
+ * were probably read wrongly.
  */
 export function readTier3Table(html: string): Tier3Row[] {
   for (const table of each(html, "table")) {
-    const headings = each(table, "th").map(plain);
+    const tableRows = each(table, "tr");
+    const headingRow = tableRows.findIndex((row) => /<th\b/i.test(row) && !/<td\b/i.test(row));
+
+    if (headingRow === -1) {
+      continue;
+    }
+
+    const headings = each(tableRows[headingRow], "th").map(plain);
     const nameAt = headings.findIndex((heading) => /drug/i.test(heading) && /active ingredient/i.test(heading));
     const dateAt = headings.findIndex((heading) => /date/i.test(heading) && /tier\s*3/i.test(heading));
     const covidAt = headings.findIndex((heading) => /covid/i.test(heading));
@@ -114,26 +133,35 @@ export function readTier3Table(html: string): Tier3Row[] {
     }
 
     const rows = new Map<string, Tier3Row>();
+    let read = 0;
+    let lookRight = 0;
 
-    for (const row of each(table.replace(/<thead\b[\s\S]*?<\/thead>/i, ""), "tr")) {
-      const cells = each(row, "td").map(plain);
+    for (const row of tableRows.slice(headingRow + 1)) {
+      const cells = each(row, "t[hd]").map(plain);
       const name = cells[nameAt]?.slice(0, 200);
 
       if (!name) {
         continue;
       }
 
+      const tier3Since = cells[dateAt]?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? null;
       const covid = covidAt === -1 ? "" : (cells[covidAt] ?? "");
       const id = idFor(name);
+      const seen = rows.get(id);
 
-      if (!rows.has(id)) {
-        rows.set(id, {
-          id,
-          name,
-          tier3Since: cells[dateAt]?.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? null,
-          usedForCovid: /^yes\b/i.test(covid) ? true : /^no\b/i.test(covid) ? false : null,
-        });
+      read += 1;
+
+      if (tier3Since && !isDateLike(name)) {
+        lookRight += 1;
       }
+
+      if (!seen || (tier3Since !== null && (seen.tier3Since === null || tier3Since > seen.tier3Since))) {
+        rows.set(id, { id, name, tier3Since, usedForCovid: /^yes\b/i.test(covid) ? true : /^no\b/i.test(covid) ? false : null });
+      }
+    }
+
+    if (read > 0 && lookRight < read * rowsThatMustLookRight) {
+      throw new Error(`Only ${lookRight} of the ${read} rows in Health Canada's Tier 3 table had a name and a date, so it wasn't read.`);
     }
 
     return [...rows.values()];
@@ -193,10 +221,12 @@ async function claimLease(db: Database, now: Date): Promise<boolean> {
   return claimed !== undefined;
 }
 
-/** Takes out the made-up medicines and the first real-data try earlier versions kept, with anyone's tracking of them. */
+/** Takes out the made-up medicines (earlier versions' and the tests') and the first real-data try, with anyone's tracking of them. */
 export async function removeRetiredMedicines(db: Database): Promise<void> {
   await db.delete(medicine).where(inArray(medicine.id, retiredIds));
   await db.delete(medicine).where(like(medicine.id, "hps-%"));
+  // The tests' made-up medicines, should they ever reach a real database.
+  await db.delete(medicine).where(like(medicine.id, "t3-sample-%"));
 }
 
 type Update = { kind: "medicine_changed" | "tier3_added"; summary: string };
@@ -242,21 +272,55 @@ export async function refreshTier3(db: Database, { now = new Date(), fetcher = f
   }
 }
 
+/** The most medicines one read may take off the list: more at once is more likely a fault than real. */
+export const mostDropOffs = 5;
+
+/** A name reduced to its letters and digits, so small wording changes compare equal. */
+function squashed(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/** The first word of a name, in lower case. */
+function firstWord(name: string): string {
+  return name.toLowerCase().match(/[a-z0-9]+/)?.[0] ?? "";
+}
+
+/** Whether two names on the same date are probably Health Canada rewording one medicine. */
+function isRewording(a: string, b: string): boolean {
+  return squashed(a) === squashed(b) || (firstWord(a) !== "" && firstWord(a) === firstWord(b));
+}
+
+type Known = { id: string; name: string; status: string; tier3Since: string | null; usedForCovid: boolean | null };
+
 /** Saves the table, and returns what to tell people. */
 async function saveRows(db: Database, rows: Tier3Row[], now: Date): Promise<Update[]> {
   await removeRetiredMedicines(db);
 
-  const known = await db
+  const known: Known[] = await db
     .select({ id: medicine.id, name: medicine.name, status: medicine.status, tier3Since: medicine.tier3Since, usedForCovid: medicine.usedForCovid })
     .from(medicine)
     .where(like(medicine.id, `${prefix}%`));
-  const before = new Map(known.map((row) => [row.id, row]));
+  // Matched by name, as it's saved now: a renamed medicine keeps its first id, so tracking it carries on.
+  const byName = new Map(known.map((row) => [idFor(row.name), row]));
   const tracked = new Set((await db.selectDistinct({ id: trackedMedicine.medicineId }).from(trackedMedicine)).map((row) => row.id));
   const isFirstRead = known.length === 0;
   const updates: Update[] = [];
 
+  // A listed medicine whose name has gone, and a new name with the same Tier 3 date and a similar name, is Health Canada rewording it.
+  const onPage = new Set(rows.map((row) => row.id));
+  const missing = known.filter((row) => row.status === "listed" && !onPage.has(idFor(row.name)));
+  const renamed = new Map<string, Known>();
+
+  for (const row of rows.filter((item) => !byName.has(item.id))) {
+    const matches = missing.filter((was) => was.tier3Since !== null && was.tier3Since === row.tier3Since && isRewording(was.name, row.name) && ![...renamed.values()].includes(was));
+
+    if (matches.length === 1) {
+      renamed.set(row.id, matches[0]);
+    }
+  }
+
   for (const row of rows) {
-    const was = before.get(row.id);
+    const was = byName.get(row.id) ?? renamed.get(row.id);
 
     if (!was) {
       const addedAt = row.tier3Since && !isFirstRead ? now : row.tier3Since ? new Date(`${row.tier3Since}T12:00:00Z`) : now;
@@ -276,24 +340,27 @@ async function saveRows(db: Database, rows: Tier3Row[], now: Date): Promise<Upda
     }
 
     if (was.tier3Since !== row.tier3Since || was.usedForCovid !== row.usedForCovid || was.name !== row.name) {
-      await db.update(medicine).set({ name: row.name, tier3Since: row.tier3Since, usedForCovid: row.usedForCovid }).where(eq(medicine.id, row.id));
+      await db.update(medicine).set({ name: row.name, tier3Since: row.tier3Since, usedForCovid: row.usedForCovid }).where(eq(medicine.id, was.id));
     }
 
     if (was.status !== "listed") {
-      await changeStatus(db, row.id, "listed", "Back on the Tier 3 list.", now);
+      await changeStatus(db, was.id, "listed", "Back on the Tier 3 list.", now);
 
-      if (tracked.has(row.id)) {
+      if (tracked.has(was.id)) {
         updates.push({ kind: "medicine_changed", summary: `${row.name} is back on Health Canada's Tier 3 list of the most serious drug shortages.` });
       }
     }
   }
 
-  // Off the list now. Only judged when the table looks whole: not much smaller than the list it replaces.
+  // Off the list now. Only judged when the table looks whole: nearly as long as the list it replaces, and only a few gone at once.
   const listed = known.filter((row) => row.status === "listed");
-  const onPage = new Set(rows.map((row) => row.id));
+  const renamedIds = new Set([...renamed.values()].map((row) => row.id));
+  const gone = missing.filter((row) => !renamedIds.has(row.id));
 
-  if (rows.length * 2 >= listed.length) {
-    for (const row of listed.filter((item) => !onPage.has(item.id))) {
+  if (gone.length > 0 && (rows.length < listed.length * rowsThatMustLookRight || gone.length > mostDropOffs)) {
+    console.error(`Health Canada's Tier 3 table would take ${gone.length} of ${listed.length} medicines off the list with ${rows.length} rows, so none were taken off this time.`);
+  } else {
+    for (const row of gone) {
       await changeStatus(db, row.id, "delisted", "Taken off the Tier 3 list.", now);
 
       if (tracked.has(row.id)) {
