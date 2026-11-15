@@ -22,20 +22,20 @@ describe("tracking medicines", () => {
   it("keeps each person's list to themselves", async () => {
     const db = await withPeople();
 
-    await trackMedicine(db, "sam", "salbutamol-inhaler");
-    await trackMedicine(db, "sam", "amoxicillin-liquid");
+    await trackMedicine(db, "sam", "t3-sample-salbutamol-inhaler");
+    await trackMedicine(db, "sam", "t3-sample-amoxicillin-liquid");
 
-    expect((await listTracked(db, "sam")).map((item) => item.id)).toEqual(["amoxicillin-liquid", "salbutamol-inhaler"]);
+    expect((await listTracked(db, "sam")).map((item) => item.id)).toEqual(["t3-sample-amoxicillin-liquid", "t3-sample-salbutamol-inhaler"]);
     expect(await listTracked(db, "ana")).toEqual([]);
   });
 
   it("tracks a medicine once, however often it's pressed", async () => {
     const db = await withPeople();
 
-    await trackMedicine(db, "sam", "metformin");
-    await trackMedicine(db, "sam", "metformin");
+    await trackMedicine(db, "sam", "t3-sample-metformin");
+    await trackMedicine(db, "sam", "t3-sample-metformin");
 
-    expect(await trackedIds(db, "sam")).toEqual(new Set(["metformin"]));
+    expect(await trackedIds(db, "sam")).toEqual(new Set(["t3-sample-metformin"]));
   });
 
   it("won't track a medicine that isn't on the list", async () => {
@@ -47,26 +47,25 @@ describe("tracking medicines", () => {
 
   it("only lets people stop tracking on their own list", async () => {
     const db = await withPeople();
-    await trackMedicine(db, "sam", "metformin");
-    await trackMedicine(db, "ana", "metformin");
+    await trackMedicine(db, "sam", "t3-sample-metformin");
+    await trackMedicine(db, "ana", "t3-sample-metformin");
 
-    await stopTracking(db, "ana", "metformin");
+    await stopTracking(db, "ana", "t3-sample-metformin");
 
-    expect(await trackedIds(db, "sam")).toEqual(new Set(["metformin"]));
+    expect(await trackedIds(db, "sam")).toEqual(new Set(["t3-sample-metformin"]));
     expect(await trackedIds(db, "ana")).toEqual(new Set());
   });
 
   it("shows changes only to the medicines someone tracks, newest first", async () => {
     const db = await withPeople();
-    await trackMedicine(db, "sam", "amoxicillin-liquid");
-    await trackMedicine(db, "sam", "salbutamol-inhaler");
-    await trackMedicine(db, "ana", "lisdexamfetamine");
+    await trackMedicine(db, "sam", "t3-sample-amoxicillin-liquid");
+    await trackMedicine(db, "sam", "t3-sample-salbutamol-inhaler");
+    await trackMedicine(db, "ana", "t3-sample-methylphenidate");
 
     const changes = await changesToTracked(db, "sam", daysBefore(now, 7));
 
     expect(changes.map((change) => [change.medicineId, change.status])).toEqual([
-      ["amoxicillin-liquid", "shortage"],
-      ["salbutamol-inhaler", "available"],
+      ["t3-sample-salbutamol-inhaler", "delisted"],
     ]);
   });
 });

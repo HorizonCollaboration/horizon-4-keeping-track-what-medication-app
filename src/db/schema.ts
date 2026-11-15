@@ -10,9 +10,10 @@ import { user } from "./auth-schema";
 export { user };
 
 /**
- * The shared list of medicines and how easy they are to get. Nobody owns it:
- * it comes from the government's public shortage list (sample data for now).
- * status is one of the keys in src/lib/statuses.ts.
+ * The shared list of medicines. Nobody owns it: it's a copy of Health
+ * Canada's list of Tier 3 drug shortages. status is one of the keys in
+ * src/lib/statuses.ts. strength, form and maker are from an earlier version
+ * and left empty now, as the list doesn't give them.
  */
 export const medicine = pgTable("medicine", {
   id: text("id").primaryKey(),
@@ -25,6 +26,10 @@ export const medicine = pgTable("medicine", {
   expectedBack: date("expected_back", { mode: "string" }),
   lastChangedAt: timestamp("last_changed_at").notNull().defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  /** When Health Canada rated it a Tier 3 shortage, as it says. */
+  tier3Since: date("tier3_since", { mode: "string" }),
+  /** Whether Health Canada says it's used to treat COVID-19 or related conditions, or null if it doesn't say. */
+  usedForCovid: boolean("used_for_covid"),
 });
 
 /** Each change to a medicine's status, so people can see its history. */

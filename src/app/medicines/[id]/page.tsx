@@ -4,7 +4,7 @@ import { SourceNote } from "@/components/SourceNote";
 import { StatusTag } from "@/components/StatusTag";
 import { TrackButton } from "@/components/TrackButton";
 import { db } from "@/db";
-import { Button, Card, EmptyState, List, Row, ScreenHeader, Section, Tile } from "@/kit";
+import { Button, Card, EmptyState, List, Row, ScreenHeader, Section, Tag, Tile } from "@/kit";
 import { fullName, getMedicine, loadMedicines } from "@/lib/data/medicines";
 import { trackedIds } from "@/lib/data/tracking";
 import { calendarDate, whenText } from "@/lib/dates";
@@ -17,7 +17,7 @@ const cameFrom: Record<string, { tab: TabId; label: string; href: string }> = {
   find: { tab: "find", label: "Find a medicine", href: "/find" },
 };
 
-/** One medicine in full: what it is, whether you can get it, when it's expected back, and what's changed. */
+/** One medicine in full: whether it's on Health Canada's Tier 3 list, since when, and what's changed. */
 export default async function MedicinePage({ params, searchParams }: PageProps<"/medicines/[id]">) {
   const user = await currentUser();
   const { id } = await params;
@@ -58,43 +58,28 @@ export default async function MedicinePage({ params, searchParams }: PageProps<"
         back={{ label: place.label, href: place.href }}
         icon={Pill}
         title={fullName(item)}
-        description={`${item.form} · made by ${item.maker}`}
+        description={item.status === "listed" ? "On Health Canada's Tier 3 list of the most serious drug shortages." : "No longer on Health Canada's Tier 3 list."}
         action={<TrackButton medicineId={item.id} name={fullName(item)} tracking={tracking} signedIn={user !== null} place="header" />}
       />
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card title="Right now" description={`Last changed ${whenText(item.lastChangedAt, now).toLowerCase()}`}>
           <div className="flex flex-col gap-2">
-            <div>
+            <div className="flex flex-wrap gap-2">
               <StatusTag status={item.status} />
+              {item.usedForCovid && <Tag tone="info">Used for COVID-19</Tag>}
             </div>
-            {item.reason && <p>{item.reason}</p>}
-            {item.status === "available" && <p>Pharmacies should be able to get it as normal.</p>}
+            <p>
+              {item.status === "listed"
+                ? "Health Canada rates this shortage among the most serious: it could have the greatest impact on Canada's drug supply and health care."
+                : "Health Canada has taken it off its Tier 3 list. That doesn't always mean it's easy to get: ask your pharmacist."}
+            </p>
           </div>
         </Card>
-        <Card title="Expected back" description={item.expectedBack ? "The maker's best guess, which can change." : "No date given."}>
-          <p className="text-lg font-medium">
-            {item.expectedBack
-              ? `Around ${calendarDate(item.expectedBack)}`
-              : item.status === "discontinued"
-                ? "Not coming back"
-                : item.status === "available"
-                  ? "Already available"
-                  : "Not known yet"}
-          </p>
+        <Card title="Tier 3 since" description="When Health Canada rated it a Tier 3 shortage.">
+          <p className="text-lg font-medium">{item.tier3Since ? calendarDate(item.tier3Since) : "Not given"}</p>
         </Card>
       </div>
-
-      <Card title="About this medicine">
-        <dl className="grid grid-cols-3 gap-x-4 gap-y-2">
-          <dt className="text-muted-foreground">Strength</dt>
-          <dd className="col-span-2">{item.strength}</dd>
-          <dt className="text-muted-foreground">Form</dt>
-          <dd className="col-span-2">{item.form}</dd>
-          <dt className="text-muted-foreground">Maker</dt>
-          <dd className="col-span-2">{item.maker}</dd>
-        </dl>
-      </Card>
 
       <Section title="What's changed">
         <List>

@@ -6,14 +6,10 @@ See [HORIZON.md](HORIZON.md) for how it's made, the rules for changing it, and h
 
 MIT licence: anyone can use, change and share it.
 
-## Real shortage data
+## Where the medicines come from
 
-Medicine Watch starts with made-up sample medicines. To show Health Canada's real list of medicine shortages instead, from [Health Product Shortages Canada](https://www.healthproductshortages.ca), register an account there and set these environment variables (in Laravel Cloud, on the app's environment, then deploy):
+Medicine Watch's list is a copy of Health Canada's [Tier 3 drug shortages](https://www.canada.ca/en/health-canada/services/drugs-health-products/drug-products/drug-shortages/tier-3-shortages.html) page: the shortages Health Canada rates most serious. It isn't every shortage. The app reads the page itself, so there's nothing to set up and no account: it reads it just after someone opens a page, when the last good read is more than 6 hours old. If the page can't be read, people see what it said last time; until it has been read once, the app says so rather than showing anything made up.
 
-| Variable | What it is |
-| --- | --- |
-| `OUTSIDE_SHORTAGES_EMAIL` | The account's email address. |
-| `OUTSIDE_SHORTAGES_PASSWORD` | The account's password. |
-| `OUTSIDE_SHORTAGES_API_URL` | Optional. The list's API, if it isn't `https://www.healthproductshortages.ca/api/v1`. Must start with `https://`. |
+For each medicine it keeps the name, the date it became a Tier 3 shortage, and whether Health Canada says it's used for COVID-19. When a medicine someone tracks joins or leaves the list, the app sends the "A tracked medicine changed" email update, and a new medicine on the list sends "A medicine joined the Tier 3 list", to whoever has chosen them on the Updates page.
 
-The app checks the list just after someone opens a page, when its last good check is more than 6 hours old, so nobody waits for it. A fresh install shows the sample medicines until the first good check replaces them. If the list can't be reached, people see what it said last time. When a medicine someone tracks changes, the app sends the "A tracked medicine changed" email update to whoever has chosen it on the Updates page.
+The list is reproduced for non-commercial use under [canada.ca's terms and conditions](https://www.canada.ca/en/transparency/terms.html): the app names the material, says it's a copy of the version on canada.ca and when it was read, and links to it. The app reads the page's table, so if Health Canada changes how the page is laid out, reading it may stop working until the app is updated.

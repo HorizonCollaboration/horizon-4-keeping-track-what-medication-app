@@ -54,6 +54,11 @@ export function calendarDate(value: string): string {
   return fullDate.format(new Date(`${value}T12:00:00Z`));
 }
 
+/** A moment's calendar day, as "15 Nov 2026". */
+export function fullDayText(date: Date): string {
+  return calendarDate(dayKey(date));
+}
+
 /** The date this many days from today, as YYYY-MM-DD. */
 export function dateFromToday(days: number, now: Date): string {
   return dayKey(new Date(now.getTime() + days * day));

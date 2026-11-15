@@ -1,5 +1,6 @@
 import { Bell, CircleCheck, Mail, RefreshCw, Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { SourceNote } from "@/components/SourceNote";
 import { StatusTag } from "@/components/StatusTag";
 import { db } from "@/db";
 import { Button, Card, EmptyState, List, Row, ScreenHeader, Section, Tile } from "@/kit";
@@ -40,7 +41,7 @@ export default async function UpdatesPage() {
       <ScreenHeader
         icon={Bell}
         title="Updates"
-        description="Every change to the medicines you track. On days with no change we still say so, so you know it's working."
+        description="When a medicine you track joins or leaves Health Canada's Tier 3 list. On days with no change we still say so, so you know it's working."
         action={
           tracked.length > 0 && (
             <Button variant="primary" href="/alerts">
@@ -66,7 +67,7 @@ export default async function UpdatesPage() {
       ) : (
         <>
           <Card
-            title={checkedAt ? `List last checked ${dayLabel(checkedAt, now).toLowerCase()} at ${timeText(checkedAt)}` : "The list hasn't been checked yet"}
+            title={checkedAt ? `Health Canada's list last read ${dayLabel(checkedAt, now).toLowerCase()} at ${timeText(checkedAt)}` : "We couldn't read Health Canada's list just now. Try again later."}
             description={`Showing changes to the ${tracked.length === 1 ? "1 medicine" : `${tracked.length} medicines`} you track.`}
           />
 
@@ -95,6 +96,8 @@ export default async function UpdatesPage() {
               </List>
             </Section>
           ))}
+
+          <SourceNote />
         </>
       )}
     </AppShell>

@@ -1,17 +1,18 @@
-import { LogIn, Pill, Search } from "lucide-react";
+import { CloudOff, LogIn, Pill, Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { SourceNote } from "@/components/SourceNote";
 import { StatusTag } from "@/components/StatusTag";
 import { TrackButton } from "@/components/TrackButton";
 import { db } from "@/db";
-import { Button, EmptyState, List, Row, ScreenHeader, Tile } from "@/kit";
-import { fullName, loadMedicines, searchMedicines } from "@/lib/data/medicines";
+import { Button, EmptyState, List, Row, ScreenHeader, Tag, Tile } from "@/kit";
+import { fullName, lastChecked, loadMedicines, searchMedicines } from "@/lib/data/medicines";
 import { trackedIds } from "@/lib/data/tracking";
+import { calendarDate } from "@/lib/dates";
 import { isStatus } from "@/lib/statuses";
 import { currentUser } from "@/lib/session";
 import { FindFilters } from "./FindFilters";
 
-/** Find a medicine: search the whole list by name and status. Anyone can, signed in or not. */
+/** Find a medicine: search Health Canada's Tier 3 list by name and status. Anyone can, signed in or not. */
 export default async function FindPage({ searchParams }: PageProps<"/find">) {
   const user = await currentUser();
   const params = await searchParams;
@@ -20,14 +21,14 @@ export default async function FindPage({ searchParams }: PageProps<"/find">) {
 
   await loadMedicines(db);
 
-  const [results, tracking] = await Promise.all([searchMedicines(db, { query, status }), user ? trackedIds(db, user.id) : new Set<string>()]);
+  const [results, tracking, checkedAt] = await Promise.all([searchMedicines(db, { query, status }), user ? trackedIds(db, user.id) : new Set<string>(), lastChecked(db)]);
 
   return (
     <AppShell current="find" user={user}>
       <ScreenHeader
         icon={Search}
         title="Find a medicine"
-        description="Search the government's public list of medicine shortages, and track the ones you care about."
+        description="Search Health Canada's Tier 3 list: the drug shortages it rates most serious. Track the ones you care about to hear when they join or leave it."
         action={
           user ? (
             <Button variant="primary" href="/">
@@ -43,38 +44,50 @@ export default async function FindPage({ searchParams }: PageProps<"/find">) {
         }
       />
 
-      <FindFilters query={query} status={status} />
-
-      <p className="text-sm text-muted-foreground" aria-live="polite">
-        {results.length === 1 ? "1 medicine" : `${results.length} medicines`}
-      </p>
-
-      {results.length === 0 ? (
+      {checkedAt === null ? (
         <EmptyState
-          icon={Search}
-          title="No medicines found"
-          description={
-            query.trim()
-              ? `Nothing matches "${query.trim()}". Check the spelling, or try the name on the medicine's label.`
-              : "No medicines have this status right now. Try showing all medicines."
-          }
-          action={<Button href="/find">Show all medicines</Button>}
+          icon={CloudOff}
+          title="We couldn't read Health Canada's list just now"
+          description="Try again later. We only show what Health Canada's Tier 3 list says, so there's nothing to show until we've read it."
+          action={<Button href="/find">Try again</Button>}
         />
       ) : (
-        <List>
-          {results.map((item) => (
-            <Row
-              key={item.id}
-              href={`/medicines/${item.id}`}
-              media={<Tile icon={Pill} />}
-              title={fullName(item)}
-              description={`${item.form} · ${item.maker}`}
-              actions={<TrackButton medicineId={item.id} name={fullName(item)} tracking={tracking.has(item.id)} signedIn={user !== null} place="row" />}
-            >
-              <StatusTag status={item.status} />
-            </Row>
-          ))}
-        </List>
+        <>
+          <FindFilters query={query} status={status} />
+
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            {results.length === 1 ? "1 medicine" : `${results.length} medicines`}
+          </p>
+
+          {results.length === 0 ? (
+            <EmptyState
+              icon={Search}
+              title="No medicines found"
+              description={
+                query.trim()
+                  ? `Nothing matches "${query.trim()}". Only the shortages Health Canada rates most serious are listed, so a medicine that's hard to get may not be here.`
+                  : "No medicines have this status right now. Try showing all medicines."
+              }
+              action={<Button href="/find">Show all medicines</Button>}
+            />
+          ) : (
+            <List>
+              {results.map((item) => (
+                <Row
+                  key={item.id}
+                  href={`/medicines/${item.id}`}
+                  media={<Tile icon={Pill} />}
+                  title={fullName(item)}
+                  description={item.tier3Since ? `Tier 3 since ${calendarDate(item.tier3Since)}` : undefined}
+                  actions={<TrackButton medicineId={item.id} name={fullName(item)} tracking={tracking.has(item.id)} signedIn={user !== null} place="row" />}
+                >
+                  <StatusTag status={item.status} />
+                  {item.usedForCovid && <Tag tone="info">Used for COVID-19</Tag>}
+                </Row>
+              ))}
+            </List>
+          )}
+        </>
       )}
 
       <SourceNote />

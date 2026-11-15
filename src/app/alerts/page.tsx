@@ -16,7 +16,7 @@ export default async function AlertsPage() {
 
   return (
     <AppShell current="alerts" user={user}>
-      <ScreenHeader icon={Mail} title="Email alerts" description="Choose whether we email you when one of the medicines you track changes." />
+      <ScreenHeader icon={Mail} title="Email alerts" description="Choose whether we email you when a medicine you track joins or leaves Health Canada's Tier 3 list of the most serious drug shortages." />
 
       <Card
         title={alert.on ? "Email alerts are on" : "Email alerts are off"}
