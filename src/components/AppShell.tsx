@@ -26,7 +26,7 @@ export async function AppShell({ current, user, children }: { current: TabId; us
     const now = new Date();
     const [tracked, changes] = await Promise.all([listTracked(db, user.id), changesToTracked(db, user.id, daysBefore(now, 7))]);
 
-    tabs[0].count = tracked.filter((item) => item.status === "shortage").length;
+    tabs[0].count = tracked.filter((item) => item.status === "listed").length;
     tabs[0].countTone = "urgent";
     tabs.push(
       { id: "updates", label: "Updates", href: "/my-updates", icon: Bell, count: changes.filter((change) => daysAgo(change.changedAt, now) < 7).length },

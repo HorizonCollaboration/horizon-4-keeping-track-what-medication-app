@@ -1,31 +1,27 @@
 import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
 import { after } from "next/server";
 import type { Database } from "@/db";
-import { listCheck, medicine, medicineChange } from "@/db/schema";
-import { dateFromToday, daysBefore } from "@/lib/dates";
+import { medicine, medicineChange } from "@/db/schema";
+import { daysBefore } from "@/lib/dates";
 import { urgency, type Status } from "@/lib/statuses";
 import { sampleMedicines } from "@/sampleData";
-import { refreshShortages, shortageSource, type ShortageSource } from "./shortages";
-
-/** The one shared list, for now: the government's public list of medicine shortages. */
-const governmentList = "government-list";
+import { lastRead, refreshTier3, removeRetiredMedicines } from "./tier3";
 
 export type Medicine = typeof medicine.$inferSelect;
 
-/** Most urgent first (short supply, then expected, ...), then by name. */
+/** On the Tier 3 list first, then by name. */
 export function byUrgency(a: Medicine, b: Medicine): number {
   return urgency(a.status) - urgency(b.status) || a.name.localeCompare(b.name);
 }
 
-/** The medicine's name with its strength, such as "Amoxicillin 250 mg/5 mL". */
+/** The medicine's name, with its strength when it has one. */
 export function fullName(item: { name: string; strength: string }): string {
-  return `${item.name} ${item.strength}`;
+  return `${item.name} ${item.strength}`.trim();
 }
 
 /**
- * Fills an empty list with the sample medicines, with their dates counted
- * from now. Does nothing once there are medicines, and is safe to run twice
- * at once. Until the live government list is connected, this is the list.
+ * For the tests only: fills an empty list with the made-up sample medicines,
+ * with their dates counted from now. The app itself never shows them.
  */
 export async function loadSampleMedicines(db: Database, now = new Date()): Promise<void> {
   if ((await db.$count(medicine)) > 0) {
@@ -38,12 +34,12 @@ export async function loadSampleMedicines(db: Database, now = new Date()): Promi
       sampleMedicines.map((item) => ({
         id: item.id,
         name: item.name,
-        strength: item.strength,
-        form: item.form,
-        maker: item.maker,
+        strength: "",
+        form: "",
+        maker: "",
         status: item.history[0].status,
-        reason: item.reason,
-        expectedBack: item.backIn === null ? null : dateFromToday(item.backIn, now),
+        tier3Since: item.tier3Since,
+        usedForCovid: item.usedForCovid,
         lastChangedAt: daysBefore(now, item.history[0].ago),
       })),
     )
@@ -63,35 +59,30 @@ export async function loadSampleMedicines(db: Database, now = new Date()): Promi
       ),
     )
     .onConflictDoNothing();
-
-  await db.insert(listCheck).values({ id: governmentList, checkedAt: now }).onConflictDoNothing();
 }
 
 /**
- * Makes sure there's a medicine list before a page shows it. Without the
- * real shortage list, that's the made-up sample medicines. With it, a fresh
- * install shows the sample medicines straight away, and the real list is
- * checked after the page has been sent (when it's due), so nobody waits for
- * it; the first good check replaces the sample medicines.
+ * Gets the list ready before a page shows it. It's a copy of Health Canada's
+ * Tier 3 list: never anything made up. The very first time, the page waits
+ * for the first read (a few seconds at most); after that, the list is read
+ * again after the page has been sent, when it's due, so nobody waits.
  */
 export async function loadMedicines(
   db: Database,
-  { source = shortageSource(), later = after }: { source?: ShortageSource | null; later?: (work: () => Promise<void>) => void } = {},
+  { later = after, read = refreshTier3 }: { later?: (work: () => Promise<void>) => void; read?: (db: Database) => Promise<void> } = {},
 ): Promise<void> {
-  if (!source || (await db.$count(medicine)) === 0) {
-    await loadSampleMedicines(db);
-  }
+  await removeRetiredMedicines(db);
 
-  if (source) {
-    later(() => refreshShortages(db, source));
+  if ((await lastRead(db)) === null) {
+    await read(db);
+  } else {
+    later(() => read(db));
   }
 }
 
-/** When the list was last checked, or null if it never has been. */
+/** When Health Canada's list was last read in full, or null if it never has been. */
 export async function lastChecked(db: Database): Promise<Date | null> {
-  const [row] = await db.select().from(listCheck).where(eq(listCheck.id, governmentList));
-
-  return row?.checkedAt ?? null;
+  return lastRead(db);
 }
 
 /** Puts a backslash before the characters that mean "anything" in a LIKE pattern, so they're searched for as they are. */

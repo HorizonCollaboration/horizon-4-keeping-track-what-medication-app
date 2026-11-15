@@ -1,11 +1,13 @@
 import type { TagTone } from "@/kit";
 
-/** How easy a medicine is to get, in words. The order is how urgent each is, most urgent first. */
+/**
+ * Where a medicine stands on Health Canada's list of Tier 3 drug shortages:
+ * the shortages it rates most serious. The order is how urgent each is,
+ * most urgent first.
+ */
 export const statuses = {
-  shortage: { label: "Short supply", tone: "urgent" },
-  expected: { label: "Shortage expected", tone: "warning" },
-  discontinued: { label: "No longer made", tone: "neutral" },
-  available: { label: "Available", tone: "good" },
+  listed: { label: "On the Tier 3 list", tone: "urgent" },
+  delisted: { label: "No longer on the Tier 3 list", tone: "neutral" },
 } satisfies Record<string, { label: string; tone: TagTone }>;
 
 export type Status = keyof typeof statuses;

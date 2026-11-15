@@ -16,7 +16,11 @@
 export const updates = {
   medicine_changed: {
     label: "A tracked medicine changed",
-    description: "When the government's shortage list changes for a medicine someone tracks.",
+    description: "When a medicine someone tracks joins or leaves Health Canada's Tier 3 list of the most serious drug shortages.",
+  },
+  tier3_added: {
+    label: "A medicine joined the Tier 3 list",
+    description: "When Health Canada adds a medicine to its Tier 3 list of the most serious drug shortages.",
   },
 } satisfies Record<string, { label: string; description: string }>;
 
