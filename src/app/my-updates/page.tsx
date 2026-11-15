@@ -3,7 +3,7 @@ import { AppShell } from "@/components/AppShell";
 import { StatusTag } from "@/components/StatusTag";
 import { db } from "@/db";
 import { Button, Card, EmptyState, List, Row, ScreenHeader, Section, Tile } from "@/kit";
-import { fullName, lastChecked, loadSampleMedicines } from "@/lib/data/medicines";
+import { fullName, lastChecked, loadMedicines } from "@/lib/data/medicines";
 import { changesToTracked, listTracked, type TrackedChange } from "@/lib/data/tracking";
 import { dayKey, dayLabel, daysAgo, daysBefore, lastDays, timeText } from "@/lib/dates";
 import { requireUser } from "@/lib/session";
@@ -24,7 +24,7 @@ function ChangeRow({ change }: { change: TrackedChange }) {
 export default async function UpdatesPage() {
   const user = await requireUser();
 
-  await loadSampleMedicines(db);
+  await loadMedicines(db);
 
   const now = new Date();
   const [tracked, changes, checkedAt] = await Promise.all([listTracked(db, user.id), changesToTracked(db, user.id, daysBefore(now, earliest + 1)), lastChecked(db)]);

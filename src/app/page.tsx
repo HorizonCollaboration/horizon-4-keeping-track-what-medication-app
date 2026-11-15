@@ -3,7 +3,7 @@ import { AppShell } from "@/components/AppShell";
 import { StatusTag } from "@/components/StatusTag";
 import { db } from "@/db";
 import { Button, Card, EmptyState, List, Row, ScreenHeader, Stat, Tag, Tile } from "@/kit";
-import { fullName, lastChecked, loadSampleMedicines } from "@/lib/data/medicines";
+import { fullName, lastChecked, loadMedicines } from "@/lib/data/medicines";
 import { changesToTracked, listTracked } from "@/lib/data/tracking";
 import { dayLabel, daysAgo, daysBefore, timeText, whenText } from "@/lib/dates";
 import { currentUser } from "@/lib/session";
@@ -43,7 +43,7 @@ export default async function MyMedicinesPage() {
     );
   }
 
-  await loadSampleMedicines(db);
+  await loadMedicines(db);
 
   const now = new Date();
   const [tracked, recent, checkedAt] = await Promise.all([listTracked(db, user.id), changesToTracked(db, user.id, daysBefore(now, 7)), lastChecked(db)]);

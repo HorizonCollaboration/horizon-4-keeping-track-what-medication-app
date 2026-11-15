@@ -1,10 +1,11 @@
 import { Pill, RefreshCw, Search } from "lucide-react";
 import { AppShell, type TabId } from "@/components/AppShell";
+import { SourceNote } from "@/components/SourceNote";
 import { StatusTag } from "@/components/StatusTag";
 import { TrackButton } from "@/components/TrackButton";
 import { db } from "@/db";
 import { Button, Card, EmptyState, List, Row, ScreenHeader, Section, Tile } from "@/kit";
-import { fullName, getMedicine, loadSampleMedicines } from "@/lib/data/medicines";
+import { fullName, getMedicine, loadMedicines } from "@/lib/data/medicines";
 import { trackedIds } from "@/lib/data/tracking";
 import { calendarDate, whenText } from "@/lib/dates";
 import { currentUser } from "@/lib/session";
@@ -25,7 +26,7 @@ export default async function MedicinePage({ params, searchParams }: PageProps<"
   // Updates is only there once signed in.
   const place = !user && back.tab === "updates" ? cameFrom.find : back;
 
-  await loadSampleMedicines(db);
+  await loadMedicines(db);
 
   const item = await getMedicine(db, id.slice(0, 100));
 
@@ -106,6 +107,7 @@ export default async function MedicinePage({ params, searchParams }: PageProps<"
       </Section>
 
       <p className="text-sm text-muted-foreground">Always ask your pharmacist or doctor before changing or stopping any medicine.</p>
+      <SourceNote />
     </AppShell>
   );
 }
