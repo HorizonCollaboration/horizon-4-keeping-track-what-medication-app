@@ -15,6 +15,13 @@
       "when": 1794600680689,
       "tag": "0001_updates",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794773463660,
+      "tag": "0002_medicines",
+      "breakpoints": true
     }
   ]
 }
